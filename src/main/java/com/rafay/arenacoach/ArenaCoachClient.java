@@ -8,17 +8,19 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
 import org.lwjgl.glfw.GLFW;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.util.Identifier;
 
 public final class ArenaCoachClient implements ClientModInitializer {
     private static final KeyBinding.Category CATEGORY =
             KeyBinding.Category.create(Identifier.of("arena_coach", "main"));
+    private static final double MELEE_PRACTICE_RANGE = 3.0;
+
     private static KeyBinding toggleModeKey;
     private static KeyBinding lockTargetKey;
     private static KeyBinding clearTargetKey;
@@ -41,7 +43,7 @@ public final class ArenaCoachClient implements ClientModInitializer {
         clearTargetKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.arena_coach.clear", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_BACKSLASH, CATEGORY));
 
-        ClientTickEvents.END_CLIENT_TICK.register(client -> tick(client));
+        ClientTickEvents.END_CLIENT_TICK.register(ArenaCoachClient::tick);
         HudElementRegistry.addLast(Identifier.of("arena_coach", "hud"),
                 (drawContext, tickCounter) -> renderHud(MinecraftClient.getInstance(), drawContext));
     }
@@ -63,15 +65,13 @@ public final class ArenaCoachClient implements ClientModInitializer {
                 message("Press M to enable Arena Coach first", client);
                 continue;
             }
+
             Entity lookingAt = getLookedAtEntity(client);
-            if (lookingAt instanceof PlayerEntity && lookingAt != client.player) {
+            if (lookingAt != null && lookingAt != client.player && lookingAt.isAlive()) {
                 setLockedTarget(lookingAt);
-                message("Locked: " + lookingAt.getName().getString(), client);
-            } else if (lookingAt != null && lookingAt != client.player) {
-                setLockedTarget(lookingAt);
-                message("Target locked", client);
+                message("Target locked: " + lookingAt.getName().getString(), client);
             } else {
-                message("Aim at an entity, then press N", client);
+                message("Aim at a living target, then press N", client);
             }
         }
 
@@ -82,20 +82,19 @@ public final class ArenaCoachClient implements ClientModInitializer {
 
         if (!enabled) return;
 
-        if (lockedTarget != null && (!lockedTarget.isAlive() || lockedTarget.isRemoved() || lockedTarget.getEntityWorld() != client.world)) {
+        if (lockedTarget != null && (!lockedTarget.isAlive()
+                || lockedTarget.isRemoved()
+                || lockedTarget.getEntityWorld() != client.world)) {
             clearLockedTarget();
             message("Target lost", client);
         }
 
-        // Combo is a practice metric only: it observes the selected target's hurt animation.
-        if (lockedTarget != null) {
-            int hurt = lockedTarget instanceof LivingEntity living
-                    ? living.hurtTime
-                    : 0;
+        // This is a visual practice metric only; the mod never sends attacks.
+        if (lockedTarget instanceof LivingEntity living) {
+            int hurt = living.hurtTime;
             if (hurt > 0 && previousHurtTime == 0) {
                 long now = System.currentTimeMillis();
-                if (now - lastHitMillis <= 2200) combo++;
-                else combo = 1;
+                combo = now - lastHitMillis <= 2200 ? combo + 1 : 1;
                 lastHitMillis = now;
             }
             previousHurtTime = hurt;
@@ -107,31 +106,40 @@ public final class ArenaCoachClient implements ClientModInitializer {
 
     private static Entity getLookedAtEntity(MinecraftClient client) {
         HitResult hit = client.crosshairTarget;
-        if (hit instanceof EntityHitResult entityHit) return entityHit.getEntity();
-        return null;
+        return hit instanceof EntityHitResult entityHit ? entityHit.getEntity() : null;
     }
 
     private static void setLockedTarget(Entity target) {
-        if (glowingTarget != null) glowingTarget.setGlowing(false);
+        clearGlow();
         lockedTarget = target;
         glowingTarget = target;
         if (glowingTarget != null) glowingTarget.setGlowing(true);
         combo = 0;
         previousHurtTime = 0;
+        lastHitMillis = 0;
+    }
+
+    private static void clearGlow() {
+        if (glowingTarget != null && !glowingTarget.isRemoved()) {
+            glowingTarget.setGlowing(false);
+        }
+        glowingTarget = null;
     }
 
     private static void clearLockedTarget() {
-        if (glowingTarget != null) glowingTarget.setGlowing(false);
-        glowingTarget = null;
+        clearGlow();
         lockedTarget = null;
         combo = 0;
         previousHurtTime = 0;
+        lastHitMillis = 0;
     }
 
     private static void message(String text, MinecraftClient client) {
         statusMessage = text;
         statusUntil = System.currentTimeMillis() + 2200;
-        if (client.player != null) client.player.sendMessage(Text.literal("§6[Arena Coach] §f" + text), true);
+        if (client.player != null) {
+            client.player.sendMessage(Text.literal("§6[Arena Coach] §f" + text), true);
+        }
     }
 
     private static void renderHud(MinecraftClient client, net.minecraft.client.gui.DrawContext ctx) {
@@ -139,14 +147,21 @@ public final class ArenaCoachClient implements ClientModInitializer {
 
         final int x = 8;
         int y = 8;
-        final int panelWidth = 196;
+        final int panelWidth = 206;
         final int lineHeight = 12;
-        ctx.fill(x - 5, y - 5, x + panelWidth, y + 102, 0xC9101728);
+        ctx.fill(x - 5, y - 5, x + panelWidth, y + 126, 0xC9101728);
         ctx.fill(x - 5, y - 5, x + panelWidth, y + 13, 0xFFB8862B);
         ctx.drawTextWithShadow(client.textRenderer, "ARENA COACH", x, y, 0xFFFFFFFF);
         y += 20;
 
-        ctx.drawTextWithShadow(client.textRenderer, "Mode: ON | Manual only", x, y, 0xFFBFE7C5);
+        ctx.drawTextWithShadow(client.textRenderer, "Practice HUD: ON | Manual combat", x, y, 0xFFBFE7C5);
+        y += lineHeight;
+
+        float playerHealth = client.player.getHealth();
+        float playerMaxHealth = client.player.getMaxHealth();
+        ctx.drawTextWithShadow(client.textRenderer,
+                String.format(java.util.Locale.ROOT, "You: %.1f / %.1f HP", playerHealth, playerMaxHealth),
+                x, y, playerHealth <= 6.0F ? 0xFFFF7777 : 0xFFE4EAF5);
         y += lineHeight;
 
         if (lockedTarget != null && lockedTarget.isAlive()) {
@@ -154,24 +169,43 @@ public final class ArenaCoachClient implements ClientModInitializer {
             ctx.drawTextWithShadow(client.textRenderer,
                     "Target: " + lockedTarget.getName().getString(), x, y, 0xFFFFD76A);
             y += lineHeight;
+
+            if (lockedTarget instanceof LivingEntity living) {
+                float hp = living.getHealth();
+                float maxHp = living.getMaxHealth();
+                float absorption = living.getAbsorptionAmount();
+                String hpLine = absorption > 0.0F
+                        ? String.format(java.util.Locale.ROOT, "Target HP: %.1f/%.1f (+%.1f)", hp, maxHp, absorption)
+                        : String.format(java.util.Locale.ROOT, "Target HP: %.1f/%.1f", hp, maxHp);
+                ctx.drawTextWithShadow(client.textRenderer, hpLine, x, y,
+                        hp <= 6.0F ? 0xFFFF7777 : 0xFFE4EAF5);
+            } else {
+                ctx.drawTextWithShadow(client.textRenderer, "Target HP: unavailable", x, y, 0xFFE4EAF5);
+            }
+            y += lineHeight;
+
             ctx.drawTextWithShadow(client.textRenderer,
                     String.format(java.util.Locale.ROOT, "Distance: %.1fm", distance), x, y, 0xFFE4EAF5);
             y += lineHeight;
-            ctx.drawTextWithShadow(client.textRenderer, "Combo: " + combo, x, y, 0xFFE4EAF5);
+
+            boolean inPracticeRange = distance <= MELEE_PRACTICE_RANGE;
+            ctx.drawTextWithShadow(client.textRenderer,
+                    "Melee range: " + (inPracticeRange ? "IN RANGE" : "TOO FAR"),
+                    x, y, inPracticeRange ? 0xFF75F59A : 0xFFFFD76A);
+            y += lineHeight;
+
+            ctx.drawTextWithShadow(client.textRenderer, "Combo observed: " + combo, x, y, 0xFFE4EAF5);
         } else {
             ctx.drawTextWithShadow(client.textRenderer, "Target: none (aim + N)", x, y, 0xFFE4EAF5);
             y += lineHeight;
-            ctx.drawTextWithShadow(client.textRenderer, "Combo: --", x, y, 0xFFE4EAF5);
+            ctx.drawTextWithShadow(client.textRenderer, "Target HP: --", x, y, 0xFFE4EAF5);
+            y += lineHeight;
+            ctx.drawTextWithShadow(client.textRenderer, "Melee range: --", x, y, 0xFFE4EAF5);
+            y += lineHeight;
+            ctx.drawTextWithShadow(client.textRenderer, "Combo observed: --", x, y, 0xFFE4EAF5);
         }
 
         y += lineHeight;
-        float cooldown = client.player.getAttackCooldownProgress(tickDelta(client));
-        String cooldownText = cooldown >= 0.9F ? "READY"
-                : String.format(java.util.Locale.ROOT, "%.0f%%", cooldown * 100.0F);
-        ctx.drawTextWithShadow(client.textRenderer, "Attack cooldown: " + cooldownText, x, y,
-                cooldown >= 0.9F ? 0xFF75F59A : 0xFFFFD76A);
-        y += lineHeight;
-
         boolean falling = client.player.getVelocity().y < -0.08;
         boolean critWindow = !client.player.isOnGround()
                 && falling
@@ -187,9 +221,5 @@ public final class ArenaCoachClient implements ClientModInitializer {
             ctx.drawCenteredTextWithShadow(client.textRenderer, statusMessage,
                     ctx.getScaledWindowWidth() / 2, ctx.getScaledWindowHeight() - 50, 0xFFFFD76A);
         }
-    }
-
-    private static float tickDelta(MinecraftClient client) {
-        return client.getRenderTickCounter().getTickProgress(false);
     }
 }
