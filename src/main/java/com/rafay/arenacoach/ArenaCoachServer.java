@@ -13,15 +13,13 @@ import java.util.UUID;
 import static net.minecraft.server.command.CommandManager.literal;
 
 public final class ArenaCoachServer implements ModInitializer {
-    // Store each player's original permission so disabling the toggle does not revoke
-    // creative/spectator flight they already had.
     private static final Map<UUID, Boolean> ORIGINAL_ALLOW_FLYING = new HashMap<>();
 
     @Override
     public void onInitialize() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 dispatcher.register(literal("arenacoach")
-                        .requires(source -> source.getPermissions() >= 2)
+                        .requires(source -> source.getPermissions().test(2))
                         .then(literal("flight")
                                 .executes(context -> toggleFlight(context.getSource().getPlayerOrThrow())))));
     }
