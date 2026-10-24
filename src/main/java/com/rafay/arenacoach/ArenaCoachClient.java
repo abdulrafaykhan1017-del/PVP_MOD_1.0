@@ -3,9 +3,8 @@ package com.rafay.arenacoach;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.entity.Entity;
@@ -43,7 +42,8 @@ public final class ArenaCoachClient implements ClientModInitializer {
                 "key.arena_coach.clear", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_BACKSLASH, CATEGORY));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> tick(client));
-        HudRenderCallback.EVENT.register((drawContext, tickCounter) -> renderHud(MinecraftClient.getInstance(), drawContext));
+        HudElementRegistry.addLast(Identifier.of("arena_coach", "hud"),
+                (drawContext, tickCounter) -> renderHud(MinecraftClient.getInstance(), drawContext));
     }
 
     private static void tick(MinecraftClient client) {
@@ -137,42 +137,59 @@ public final class ArenaCoachClient implements ClientModInitializer {
     private static void renderHud(MinecraftClient client, net.minecraft.client.gui.DrawContext ctx) {
         if (!enabled || client.player == null) return;
 
-        int x = 8;
+        final int x = 8;
         int y = 8;
-        ctx.fill(x - 4, y - 4, x + 172, y + 83, 0x99070D18);
-        ctx.drawTextWithShadow(client.textRenderer, Text.literal("§6§lARENA COACH"), x, y, 0xFFFFFF);
-        y += 13;
-        ctx.drawTextWithShadow(client.textRenderer, Text.literal("§aMode: ON §8| §fManual combat only"), x, y, 0xFFFFFF);
-        y += 13;
+        final int panelWidth = 196;
+        final int lineHeight = 12;
+        ctx.fill(x - 5, y - 5, x + panelWidth, y + 102, 0xC9101728);
+        ctx.fill(x - 5, y - 5, x + panelWidth, y + 13, 0xFFB8862B);
+        ctx.drawTextWithShadow(client.textRenderer, "ARENA COACH", x, y, 0xFFFFFFFF);
+        y += 20;
 
-        if (lockedTarget != null) {
+        ctx.drawTextWithShadow(client.textRenderer, "Mode: ON | Manual only", x, y, 0xFFBFE7C5);
+        y += lineHeight;
+
+        if (lockedTarget != null && lockedTarget.isAlive()) {
             double distance = client.player.distanceTo(lockedTarget);
             ctx.drawTextWithShadow(client.textRenderer,
-                    Text.literal("§eTarget: §f" + lockedTarget.getName().getString()), x, y, 0xFFFFFF);
-            y += 12;
+                    "Target: " + lockedTarget.getName().getString(), x, y, 0xFFFFD76A);
+            y += lineHeight;
             ctx.drawTextWithShadow(client.textRenderer,
-                    Text.literal(String.format(java.util.Locale.ROOT, "§7Distance: §f%.1fm §8| §7Combo: §f%d", distance, combo)), x, y, 0xFFFFFF);
+                    String.format(java.util.Locale.ROOT, "Distance: %.1fm", distance), x, y, 0xFFE4EAF5);
+            y += lineHeight;
+            ctx.drawTextWithShadow(client.textRenderer, "Combo: " + combo, x, y, 0xFFE4EAF5);
         } else {
-            ctx.drawTextWithShadow(client.textRenderer, Text.literal("§7Target: none (look + N)"), x, y, 0xFFFFFF);
+            ctx.drawTextWithShadow(client.textRenderer, "Target: none (aim + N)", x, y, 0xFFE4EAF5);
+            y += lineHeight;
+            ctx.drawTextWithShadow(client.textRenderer, "Combo: --", x, y, 0xFFE4EAF5);
         }
 
-        y += 13;
-        float cooldown = client.player.getAttackCooldownProgress(0.0F);
-        String cooldownText = cooldown >= 0.9F ? "§aREADY" : String.format(java.util.Locale.ROOT, "§e%.0f%%", cooldown * 100.0F);
-        ctx.drawTextWithShadow(client.textRenderer, Text.literal("§7Attack cooldown: " + cooldownText), x, y, 0xFFFFFF);
-        y += 12;
+        y += lineHeight;
+        float cooldown = client.player.getAttackCooldownProgress(tickDelta(client));
+        String cooldownText = cooldown >= 0.9F ? "READY"
+                : String.format(java.util.Locale.ROOT, "%.0f%%", cooldown * 100.0F);
+        ctx.drawTextWithShadow(client.textRenderer, "Attack cooldown: " + cooldownText, x, y,
+                cooldown >= 0.9F ? 0xFF75F59A : 0xFFFFD76A);
+        y += lineHeight;
+
+        boolean falling = client.player.getVelocity().y < -0.08;
         boolean critWindow = !client.player.isOnGround()
-                && client.player.getVelocity().y < 0.0
+                && falling
                 && !client.player.isClimbing()
                 && !client.player.isTouchingWater()
-                && !client.player.hasVehicle();
+                && !client.player.hasVehicle()
+                && !client.player.isSprinting();
         ctx.drawTextWithShadow(client.textRenderer,
-                Text.literal("§7Critical timing: " + (critWindow ? "§aPossible" : "§cNot now")), x, y, 0xFFFFFF);
+                "Critical timing: " + (critWindow ? "POSSIBLE" : "not now"), x, y,
+                critWindow ? 0xFF75F59A : 0xFFFF8C8C);
 
         if (System.currentTimeMillis() < statusUntil && !statusMessage.isEmpty()) {
-            int sw = client.textRenderer.getWidth(statusMessage);
-            ctx.drawTextWithShadow(client.textRenderer, Text.literal("§6" + statusMessage),
-                    (ctx.getScaledWindowWidth() - sw) / 2, ctx.getScaledWindowHeight() - 50, 0xFFFFFF);
+            ctx.drawCenteredTextWithShadow(client.textRenderer, statusMessage,
+                    ctx.getScaledWindowWidth() / 2, ctx.getScaledWindowHeight() - 50, 0xFFFFD76A);
         }
     }
-}
+
+    private static float tickDelta(MinecraftClient client) {
+        return client.getRenderTickCounter().getTickDelta(false);
+    }
+}\n}\n
