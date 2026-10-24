@@ -18,6 +18,8 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.util.Identifier;
 
 public final class ArenaCoachClient implements ClientModInitializer {
+    private static final KeyBinding.Category CATEGORY =
+            KeyBinding.Category.create(Identifier.of("arena_coach", "main"));
     private static KeyBinding toggleModeKey;
     private static KeyBinding lockTargetKey;
     private static KeyBinding clearTargetKey;
@@ -34,11 +36,11 @@ public final class ArenaCoachClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         toggleModeKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.arena_coach.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_M, "category.arena_coach"));
+                "key.arena_coach.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_M, CATEGORY));
         lockTargetKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.arena_coach.lock", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_N, "category.arena_coach"));
+                "key.arena_coach.lock", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_N, CATEGORY));
         clearTargetKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.arena_coach.clear", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_BACKSLASH, "category.arena_coach"));
+                "key.arena_coach.clear", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_BACKSLASH, CATEGORY));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> tick(client));
         HudRenderCallback.EVENT.register((drawContext, tickCounter) -> renderHud(MinecraftClient.getInstance(), drawContext));
@@ -80,14 +82,16 @@ public final class ArenaCoachClient implements ClientModInitializer {
 
         if (!enabled) return;
 
-        if (lockedTarget != null && (!lockedTarget.isAlive() || lockedTarget.isRemoved() || lockedTarget.getWorld() != client.world)) {
+        if (lockedTarget != null && (!lockedTarget.isAlive() || lockedTarget.isRemoved() || lockedTarget.getEntityWorld() != client.world)) {
             clearLockedTarget();
             message("Target lost", client);
         }
 
         // Combo is a practice metric only: it observes the selected target's hurt animation.
         if (lockedTarget != null) {
-            int hurt = lockedTarget.hurtTime;
+            int hurt = lockedTarget instanceof LivingEntity living
+                    ? living.hurtTime
+                    : 0;
             if (hurt > 0 && previousHurtTime == 0) {
                 long now = System.currentTimeMillis();
                 if (now - lastHitMillis <= 2200) combo++;
