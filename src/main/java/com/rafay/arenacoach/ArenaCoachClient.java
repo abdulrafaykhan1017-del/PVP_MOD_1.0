@@ -14,6 +14,8 @@ import net.minecraft.text.Text;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
 import org.lwjgl.glfw.GLFW;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.util.Identifier;
 
 public final class ArenaCoachClient implements ClientModInitializer {
     private static KeyBinding toggleModeKey;
