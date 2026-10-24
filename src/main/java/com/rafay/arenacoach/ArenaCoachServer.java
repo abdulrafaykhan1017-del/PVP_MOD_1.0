@@ -2,6 +2,8 @@ package com.rafay.arenacoach;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.minecraft.command.permission.Permission;
+import net.minecraft.command.permission.PermissionLevel;
 import net.minecraft.entity.player.PlayerAbilities;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
@@ -19,7 +21,8 @@ public final class ArenaCoachServer implements ModInitializer {
     public void onInitialize() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 dispatcher.register(literal("arenacoach")
-                        .requires(source -> source.hasPermissionLevel(2))
+                        .requires(source -> source.getPermissions().hasPermission(
+                                new Permission.Level(PermissionLevel.fromLevel(2))))
                         .then(literal("flight")
                                 .executes(context -> toggleFlight(context.getSource().getPlayerOrThrow())))));
     }
