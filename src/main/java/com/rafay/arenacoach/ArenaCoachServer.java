@@ -19,7 +19,7 @@ public final class ArenaCoachServer implements ModInitializer {
     public void onInitialize() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 dispatcher.register(literal("arenacoach")
-                        .requires(source -> source.getPermissions().test(2))
+                        .requires(source -> source.hasPermissionLevel(2))
                         .then(literal("flight")
                                 .executes(context -> toggleFlight(context.getSource().getPlayerOrThrow())))));
     }
