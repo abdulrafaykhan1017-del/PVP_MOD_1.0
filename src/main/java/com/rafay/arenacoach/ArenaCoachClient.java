@@ -192,4 +192,4 @@ public final class ArenaCoachClient implements ClientModInitializer {
     private static float tickDelta(MinecraftClient client) {
         return client.getRenderTickCounter().getTickDelta(false);
     }
-}\n}\n
+}
