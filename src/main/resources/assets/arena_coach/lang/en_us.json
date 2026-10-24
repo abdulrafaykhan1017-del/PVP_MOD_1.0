@@ -1,0 +1,6 @@
+{
+  "category.arena_coach": "Arena Coach",
+  "key.arena_coach.toggle": "Toggle Arena Coach",
+  "key.arena_coach.lock": "Lock entity under crosshair",
+  "key.arena_coach.clear": "Clear locked target"
+}
