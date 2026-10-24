@@ -3,11 +3,12 @@
   "id": "arena_coach",
   "version": "${version}",
   "name": "Arena Coach",
-  "description": "PvP practice HUD with manual target lock, target health/range information, combo tracking, and critical timing hints. It never attacks automatically.",
+  "description": "PvP practice HUD and permission-gated flight toggle for worlds/servers where commands are allowed.",
   "authors": ["Rafay"],
   "license": "MIT",
-  "environment": "client",
+  "environment": "*",
   "entrypoints": {
+    "main": ["com.rafay.arenacoach.ArenaCoachServer"],
     "client": ["com.rafay.arenacoach.ArenaCoachClient"]
   },
   "depends": {
